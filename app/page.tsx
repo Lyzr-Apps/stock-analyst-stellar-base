@@ -18,6 +18,7 @@ import {
   FiLoader,
   FiTrendingUp,
   FiActivity,
+  FiClock,
 } from 'react-icons/fi'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -85,6 +86,27 @@ const LS_WATCHLIST = 'stock_watchlist'
 const LS_HISTORY = 'stock_briefing_history'
 const LS_SETTINGS = 'stock_settings'
 
+// Timezone options
+const TIMEZONE_OPTIONS = [
+  { value: 'America/New_York', label: 'America/New_York (ET)' },
+  { value: 'America/Chicago', label: 'America/Chicago (CT)' },
+  { value: 'America/Denver', label: 'America/Denver (MT)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (PT)' },
+  { value: 'America/Anchorage', label: 'America/Anchorage (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Pacific/Honolulu (HT)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
+const DAY_LABELS = [
+  { value: '0', label: 'Sun' },
+  { value: '1', label: 'Mon' },
+  { value: '2', label: 'Tue' },
+  { value: '3', label: 'Wed' },
+  { value: '4', label: 'Thu' },
+  { value: '5', label: 'Fri' },
+  { value: '6', label: 'Sat' },
+]
+
 // Types
 interface BriefingRecord {
   id: string
@@ -101,6 +123,12 @@ interface AppSettings {
     fundamental: boolean
     newsSentiment: boolean
   }
+  schedule: {
+    days: string[]
+    hour: number
+    minute: number
+    timezone: string
+  }
 }
 
 interface ScheduleInfo {
@@ -110,10 +138,40 @@ interface ScheduleInfo {
   timezone: string
 }
 
+// ---- HTML preprocessing for markdown ----
+function preprocessHtml(text: string): string {
+  if (!text) return ''
+  let result = text
+  // Replace <br>, <br/>, <br /> with newlines
+  result = result.replace(/<br\s*\/?>/gi, '\n')
+  // Convert <strong>...</strong> to **...**
+  result = result.replace(/<strong>([\s\S]*?)<\/strong>/gi, '**$1**')
+  // Convert <b>...</b> to **...**
+  result = result.replace(/<b>([\s\S]*?)<\/b>/gi, '**$1**')
+  // Convert <em>...</em> to *...*
+  result = result.replace(/<em>([\s\S]*?)<\/em>/gi, '*$1*')
+  // Convert <i>...</i> to *...*
+  result = result.replace(/<i>([\s\S]*?)<\/i>/gi, '*$1*')
+  // Strip all remaining HTML tags
+  result = result.replace(/<[^>]+>/g, '')
+  // Decode HTML entities
+  result = result.replace(/&amp;/g, '&')
+  result = result.replace(/&lt;/g, '<')
+  result = result.replace(/&gt;/g, '>')
+  result = result.replace(/&quot;/g, '"')
+  result = result.replace(/&#39;/g, "'")
+  result = result.replace(/&nbsp;/g, ' ')
+  return result
+}
+
 // ---- Markdown renderer ----
 function renderMarkdown(text: string): React.ReactNode {
   if (!text) return null
-  const lines = text.split('\n')
+  // Preprocess HTML before splitting into lines
+  const processed = preprocessHtml(text)
+  // Handle trailing backslash line continuations: replace `\` at end of line with newline
+  const withLineBreaks = processed.replace(/\\\n/g, '\n')
+  const lines = withLineBreaks.split('\n')
   const elements: React.ReactNode[] = []
   let tableRows: string[][] = []
   let tableHeaders: string[] = []
@@ -153,7 +211,9 @@ function renderMarkdown(text: string): React.ReactNode {
   }
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+    const rawLine = lines[i]
+    // Strip trailing backslash (line continuation marker)
+    const line = rawLine.endsWith('\\') ? rawLine.slice(0, -1) : rawLine
     const trimmed = line.trim()
 
     // Table detection
@@ -235,8 +295,11 @@ function renderMarkdown(text: string): React.ReactNode {
 
 function renderInlineMarkdown(text: string): React.ReactNode {
   if (!text) return null
-  // Process bold text **...** and remove citation references like [1]
-  const cleaned = text.replace(/\[\d+\]/g, '')
+  // Preprocess any remaining HTML in inline text
+  let cleaned = preprocessHtml(text)
+  // Remove citation references like [1]
+  cleaned = cleaned.replace(/\[\d+\]/g, '')
+  // Process bold text **...**
   const parts = cleaned.split(/(\*\*[^*]+\*\*)/)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -263,6 +326,43 @@ function extractResponseText(result: any): string {
     if (s && s !== '{}' && s !== 'null') return s
   } catch { /* ignore */ }
   return ''
+}
+
+// ---- Schedule display helper ----
+function formatScheduleDisplay(scheduleInfo: ScheduleInfo | null): string {
+  if (!scheduleInfo) return 'Loading...'
+  const cron = scheduleInfo.cron_expression
+  const parts = cron.split(' ')
+  if (parts.length < 5) return cron
+  const minute = parts[0]
+  const hour = parseInt(parts[1])
+  const days = parts[4]
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  let daysLabel = days
+  if (days === '*') {
+    daysLabel = 'Daily'
+  } else if (days === '1,2,3,4,5' || days === '1-5') {
+    daysLabel = 'Weekdays'
+  } else if (days === '0,1,2,3,4,5,6') {
+    daysLabel = 'Everyday'
+  } else {
+    daysLabel = `Days: ${days}`
+  }
+  let tzLabel = scheduleInfo.timezone
+  if (scheduleInfo.timezone === 'America/New_York') tzLabel = 'ET'
+  else if (scheduleInfo.timezone === 'America/Chicago') tzLabel = 'CT'
+  else if (scheduleInfo.timezone === 'America/Los_Angeles') tzLabel = 'PT'
+  else if (scheduleInfo.timezone === 'America/Denver') tzLabel = 'MT'
+  else if (scheduleInfo.timezone === 'America/Anchorage') tzLabel = 'AKT'
+  else if (scheduleInfo.timezone === 'Pacific/Honolulu') tzLabel = 'HT'
+  return `${daysLabel} ${h12}:${minute.padStart(2, '0')} ${ampm} ${tzLabel}`
+}
+
+// ---- Cron builder helper ----
+function buildCronExpression(days: string[], hour: number, minute: number): string {
+  const dayStr = days.length === 7 ? '*' : days.join(',')
+  return `${minute} ${hour} * * ${dayStr}`
 }
 
 // ---- Schedule status fetcher ----
@@ -311,6 +411,8 @@ function DashboardTab({
   sampleMode,
   activeAgentId,
   setActiveAgentId,
+  scheduleInfo,
+  scheduleLoading,
 }: {
   watchlist: string[]
   latestBriefing: string
@@ -319,20 +421,17 @@ function DashboardTab({
   sampleMode: boolean
   activeAgentId: string | null
   setActiveAgentId: (id: string | null) => void
+  scheduleInfo: ScheduleInfo | null
+  scheduleLoading: boolean
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [scheduleInfo, setScheduleInfo] = useState<ScheduleInfo | null>(null)
-  const [scheduleLoading, setScheduleLoading] = useState(false)
   const [togglingSchedule, setTogglingSchedule] = useState(false)
+  const [localScheduleInfo, setLocalScheduleInfo] = useState<ScheduleInfo | null>(scheduleInfo)
 
   useEffect(() => {
-    setScheduleLoading(true)
-    fetchScheduleStatus().then(info => {
-      setScheduleInfo(info)
-      setScheduleLoading(false)
-    })
-  }, [])
+    setLocalScheduleInfo(scheduleInfo)
+  }, [scheduleInfo])
 
   useEffect(() => {
     if (sampleMode && !latestBriefing) {
@@ -367,16 +466,17 @@ function DashboardTab({
   }
 
   const handleToggleSchedule = async () => {
-    if (!scheduleInfo) return
+    if (!localScheduleInfo) return
     setTogglingSchedule(true)
-    const success = await toggleSchedule(scheduleInfo.is_active)
+    const success = await toggleSchedule(localScheduleInfo.is_active)
     if (success) {
-      setScheduleInfo(prev => prev ? { ...prev, is_active: !prev.is_active } : prev)
+      setLocalScheduleInfo(prev => prev ? { ...prev, is_active: !prev.is_active } : prev)
     }
     setTogglingSchedule(false)
   }
 
   const displayBriefing = sampleMode ? (latestBriefing || SAMPLE_BRIEFING) : latestBriefing
+  const scheduleDisplay = formatScheduleDisplay(localScheduleInfo)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -413,7 +513,7 @@ function DashboardTab({
         <Card className="border border-border bg-card">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold tracking-tight text-card-foreground">Schedule Status</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">Automated weekday briefing at 5:20 PM ET</CardDescription>
+            <CardDescription className="text-xs text-muted-foreground">{scheduleLoading ? 'Loading schedule...' : `Automated briefing: ${scheduleDisplay}`}</CardDescription>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
             {scheduleLoading ? (
@@ -424,14 +524,14 @@ function DashboardTab({
               <>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Frequency</span>
-                  <span className="text-foreground font-medium text-xs">Weekdays 5:20 PM ET</span>
+                  <span className="text-foreground font-medium text-xs">{scheduleDisplay}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Status</span>
                   <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${scheduleInfo?.is_active !== false ? 'bg-accent' : 'bg-destructive'}`} />
-                    <span className="text-xs font-medium text-foreground">{scheduleInfo?.is_active !== false ? 'Active' : 'Paused'}</span>
+                    <div className={`h-2 w-2 rounded-full ${localScheduleInfo?.is_active !== false ? 'bg-accent' : 'bg-destructive'}`} />
+                    <span className="text-xs font-medium text-foreground">{localScheduleInfo?.is_active !== false ? 'Active' : 'Paused'}</span>
                   </div>
                 </div>
                 <Separator />
@@ -448,7 +548,7 @@ function DashboardTab({
                   className="w-full text-xs"
                 >
                   {togglingSchedule && <FiLoader className="h-3 w-3 animate-spin mr-1" />}
-                  {scheduleInfo?.is_active !== false ? 'Pause Schedule' : 'Resume Schedule'}
+                  {localScheduleInfo?.is_active !== false ? 'Pause Schedule' : 'Resume Schedule'}
                 </Button>
               </>
             )}
@@ -819,6 +919,15 @@ function SettingsTab({
   const [testLoading, setTestLoading] = useState(false)
   const [testError, setTestError] = useState<string | null>(null)
   const [testSuccess, setTestSuccess] = useState(false)
+  const [scheduleUpdating, setScheduleUpdating] = useState(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [scheduleSuccess, setScheduleSuccess] = useState(false)
+  const [frequencyMode, setFrequencyMode] = useState<'weekdays' | 'everyday' | 'custom'>(() => {
+    const days = settings.schedule.days
+    if (days.length === 7) return 'everyday'
+    if (days.length === 5 && ['1','2','3','4','5'].every(d => days.includes(d))) return 'weekdays'
+    return 'custom'
+  })
 
   const handleSave = () => {
     try {
@@ -869,6 +978,99 @@ function SettingsTab({
     })
   }
 
+  const updateSchedule = (partial: Partial<AppSettings['schedule']>) => {
+    setSettings({
+      ...settings,
+      schedule: { ...settings.schedule, ...partial },
+    })
+  }
+
+  const handleFrequencyChange = (mode: 'weekdays' | 'everyday' | 'custom') => {
+    setFrequencyMode(mode)
+    if (mode === 'weekdays') {
+      updateSchedule({ days: ['1', '2', '3', '4', '5'] })
+    } else if (mode === 'everyday') {
+      updateSchedule({ days: ['0', '1', '2', '3', '4', '5', '6'] })
+    }
+  }
+
+  const toggleDay = (day: string) => {
+    const current = settings.schedule.days
+    if (current.includes(day)) {
+      if (current.length > 1) {
+        updateSchedule({ days: current.filter(d => d !== day) })
+      }
+    } else {
+      updateSchedule({ days: [...current, day].sort((a, b) => parseInt(a) - parseInt(b)) })
+    }
+  }
+
+  const cronExpression = buildCronExpression(settings.schedule.days, settings.schedule.hour, settings.schedule.minute)
+
+  const formatHour12 = (h: number): string => {
+    if (h === 0) return '12'
+    if (h > 12) return String(h - 12)
+    return String(h)
+  }
+  const getAmPm = (h: number): string => h >= 12 ? 'PM' : 'AM'
+
+  const handleUpdateSchedule = async () => {
+    setScheduleUpdating(true)
+    setScheduleError(null)
+    setScheduleSuccess(false)
+    try {
+      const { days, hour, minute, timezone } = settings.schedule
+      const dayStr = days.length === 7 ? '*' : days.join(',')
+      const cronExpr = `${minute} ${hour} * * ${dayStr}`
+
+      // Delete old schedule
+      await fetch(`${SCHEDULER_BASE_URL}/schedules/${SCHEDULE_ID}`, {
+        method: 'DELETE',
+        headers: { 'x-api-key': API_KEY }
+      })
+
+      // Create new schedule
+      const res = await fetch(`${SCHEDULER_BASE_URL}/schedules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+        },
+        body: JSON.stringify({
+          agent_id: AGENT_ID,
+          cron_expression: cronExpr,
+          timezone: timezone,
+          message: `Analyze the following stocks and send a comprehensive briefing email. Include current price movements, technical indicators, recent news and events, analyst sentiment, and actionable recommendations. Format as a structured briefing with clear sections and tables.`,
+          max_retries: 3,
+          retry_delay: 300,
+        }),
+      })
+
+      if (res.ok) {
+        setScheduleSuccess(true)
+        setTimeout(() => setScheduleSuccess(false), 3000)
+      } else {
+        setScheduleError('Failed to update schedule. Please try again.')
+      }
+    } catch (e: any) {
+      setScheduleError(e?.message || 'Failed to update schedule.')
+    } finally {
+      setScheduleUpdating(false)
+    }
+  }
+
+  // Generate minute options (increments of 5)
+  const minuteOptions: number[] = []
+  for (let m = 0; m < 60; m += 5) {
+    minuteOptions.push(m)
+  }
+
+  // Generate hour options (0-23)
+  const hourOptions: number[] = []
+  for (let h = 0; h < 24; h++) {
+    hourOptions.push(h)
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Email Configuration */}
@@ -891,32 +1093,122 @@ function SettingsTab({
         </CardContent>
       </Card>
 
-      {/* Schedule Settings */}
+      {/* Schedule Settings - Now interactive */}
       <Card className="border border-border bg-card">
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold tracking-tight text-card-foreground">Schedule Settings</CardTitle>
-          <CardDescription className="text-xs text-muted-foreground">Current automated schedule</CardDescription>
+          <CardTitle className="text-sm font-semibold tracking-tight text-card-foreground">
+            <span className="flex items-center gap-1.5"><FiClock className="h-3.5 w-3.5" /> Schedule Settings</span>
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">Configure your automated briefing schedule</CardDescription>
         </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Frequency</span>
-            <span className="text-foreground font-medium text-xs">Weekdays at 5:20 PM</span>
+        <CardContent className="px-4 pb-4 space-y-4">
+          {/* Frequency selector */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Frequency</Label>
+            <div className="flex gap-1.5">
+              {(['weekdays', 'everyday', 'custom'] as const).map(mode => (
+                <Button
+                  key={mode}
+                  variant={frequencyMode === mode ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleFrequencyChange(mode)}
+                  className="text-xs h-7 flex-1"
+                >
+                  {mode === 'weekdays' ? 'Weekdays' : mode === 'everyday' ? 'Everyday' : 'Custom'}
+                </Button>
+              ))}
+            </div>
+            {frequencyMode === 'custom' && (
+              <div className="flex gap-1 flex-wrap pt-1">
+                {DAY_LABELS.map(day => (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => toggleDay(day.value)}
+                    className={`px-2 py-1 text-xs border rounded-sm transition-colors ${settings.schedule.days.includes(day.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-foreground/30'}`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
           <Separator />
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Timezone</span>
-            <span className="text-foreground font-medium text-xs">America/New_York (ET)</span>
+
+          {/* Time picker */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Time</Label>
+            <div className="flex items-center gap-2">
+              <select
+                value={settings.schedule.hour}
+                onChange={(e) => updateSchedule({ hour: parseInt(e.target.value) })}
+                className="flex-1 h-8 px-2 text-sm bg-background border border-border text-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {hourOptions.map(h => (
+                  <option key={h} value={h}>{formatHour12(h)} {getAmPm(h)}</option>
+                ))}
+              </select>
+              <span className="text-muted-foreground text-sm">:</span>
+              <select
+                value={settings.schedule.minute}
+                onChange={(e) => updateSchedule({ minute: parseInt(e.target.value) })}
+                className="flex-1 h-8 px-2 text-sm bg-background border border-border text-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {minuteOptions.map(m => (
+                  <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">Selected: {formatHour12(settings.schedule.hour)}:{String(settings.schedule.minute).padStart(2, '0')} {getAmPm(settings.schedule.hour)}</p>
           </div>
+
           <Separator />
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Cron</span>
-            <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5">20 17 * * 1-5</code>
+
+          {/* Timezone */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Timezone</Label>
+            <select
+              value={settings.schedule.timezone}
+              onChange={(e) => updateSchedule({ timezone: e.target.value })}
+              className="w-full h-8 px-2 text-sm bg-background border border-border text-foreground rounded-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              {TIMEZONE_OPTIONS.map(tz => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
           </div>
+
           <Separator />
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Schedule ID</span>
-            <code className="text-xs font-mono text-muted-foreground">{SCHEDULE_ID.slice(0, 16)}...</code>
+
+          {/* Cron preview */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Cron Expression</Label>
+            <code className="block text-xs font-mono text-foreground bg-muted px-2.5 py-1.5 border border-border rounded-sm">{cronExpression}</code>
           </div>
+
+          <Separator />
+
+          {/* Update Schedule button */}
+          <Button
+            onClick={handleUpdateSchedule}
+            disabled={scheduleUpdating}
+            className="w-full bg-primary text-primary-foreground text-sm"
+          >
+            {scheduleUpdating ? (
+              <><FiLoader className="h-4 w-4 animate-spin mr-2" /> Updating Schedule...</>
+            ) : scheduleSuccess ? (
+              <><FiCheck className="h-4 w-4 mr-2" /> Schedule Updated</>
+            ) : (
+              <><FiClock className="h-4 w-4 mr-2" /> Update Schedule</>
+            )}
+          </Button>
+          {scheduleError && (
+            <div className="flex items-start gap-2 text-xs text-destructive bg-destructive/10 p-2 border border-destructive/20">
+              <FiAlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+              <span>{scheduleError}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -990,10 +1282,18 @@ export default function Home() {
     email: '',
     timezone: 'America/New_York',
     analysisPrefs: { technical: true, fundamental: true, newsSentiment: true },
+    schedule: {
+      days: ['1', '2', '3', '4', '5'],
+      hour: 17,
+      minute: 20,
+      timezone: 'America/New_York',
+    },
   })
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState('')
   const [mounted, setMounted] = useState(false)
+  const [scheduleInfo, setScheduleInfo] = useState<ScheduleInfo | null>(null)
+  const [scheduleLoading, setScheduleLoading] = useState(true)
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -1028,6 +1328,7 @@ export default function Home() {
             ...prev,
             ...parsed,
             analysisPrefs: { ...prev.analysisPrefs, ...(parsed.analysisPrefs || {}) },
+            schedule: { ...prev.schedule, ...(parsed.schedule || {}) },
           }))
         }
       }
@@ -1037,6 +1338,12 @@ export default function Home() {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     }))
+
+    // Fetch schedule info
+    fetchScheduleStatus().then(info => {
+      setScheduleInfo(info)
+      setScheduleLoading(false)
+    })
   }, [])
 
   // Persist watchlist
@@ -1114,6 +1421,8 @@ export default function Home() {
               sampleMode={sampleMode}
               activeAgentId={activeAgentId}
               setActiveAgentId={setActiveAgentId}
+              scheduleInfo={scheduleInfo}
+              scheduleLoading={scheduleLoading}
             />
           </TabsContent>
 
