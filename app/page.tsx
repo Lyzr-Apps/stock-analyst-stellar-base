@@ -88,6 +88,7 @@ const LS_SETTINGS = 'stock_settings'
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
   { value: 'America/New_York', label: 'America/New_York (ET)' },
   { value: 'America/Chicago', label: 'America/Chicago (CT)' },
   { value: 'America/Denver', label: 'America/Denver (MT)' },
@@ -350,7 +351,8 @@ function formatScheduleDisplay(scheduleInfo: ScheduleInfo | null): string {
     daysLabel = `Days: ${days}`
   }
   let tzLabel = scheduleInfo.timezone
-  if (scheduleInfo.timezone === 'America/New_York') tzLabel = 'ET'
+  if (scheduleInfo.timezone === 'Asia/Kolkata') tzLabel = 'IST'
+  else if (scheduleInfo.timezone === 'America/New_York') tzLabel = 'ET'
   else if (scheduleInfo.timezone === 'America/Chicago') tzLabel = 'CT'
   else if (scheduleInfo.timezone === 'America/Los_Angeles') tzLabel = 'PT'
   else if (scheduleInfo.timezone === 'America/Denver') tzLabel = 'MT'
