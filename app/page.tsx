@@ -33,8 +33,6 @@ import { Separator } from '@/components/ui/separator'
 // Constants
 const AGENT_ID = '698b17e3a6240bbb9e1087ef'
 const SCHEDULE_ID = '698b1a9bebe6fd87d1dcc0c4'
-const SCHEDULER_BASE_URL = 'https://scheduler.studio.lyzr.ai'
-const API_KEY = process.env.NEXT_PUBLIC_LYZR_API_KEY || ''
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
 
@@ -370,11 +368,11 @@ function buildCronExpression(days: string[], hour: number, minute: number): stri
 // ---- Schedule status fetcher ----
 async function fetchScheduleStatus(): Promise<ScheduleInfo | null> {
   try {
-    const res = await fetch(`${SCHEDULER_BASE_URL}/schedules/${SCHEDULE_ID}`, {
-      headers: { 'x-api-key': API_KEY }
-    })
+    const res = await fetch(`/api/scheduler?schedule_id=${SCHEDULE_ID}`)
     if (!res.ok) return null
-    const data = await res.json()
+    const json = await res.json()
+    if (!json.success) return null
+    const data = json.data
     return {
       is_active: data?.is_active ?? true,
       cron_expression: data?.cron_expression ?? '20 17 * * 1-5',
@@ -388,12 +386,15 @@ async function fetchScheduleStatus(): Promise<ScheduleInfo | null> {
 
 async function toggleSchedule(pause: boolean): Promise<boolean> {
   try {
-    const endpoint = pause ? 'pause' : 'resume'
-    const res = await fetch(`${SCHEDULER_BASE_URL}/schedules/${SCHEDULE_ID}/${endpoint}`, {
+    const action = pause ? 'pause' : 'resume'
+    const res = await fetch('/api/scheduler', {
       method: 'POST',
-      headers: { 'x-api-key': API_KEY }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, schedule_id: SCHEDULE_ID }),
     })
-    return res.ok
+    if (!res.ok) return false
+    const json = await res.json()
+    return json.success === true
   } catch {
     return false
   }
@@ -1025,20 +1026,17 @@ function SettingsTab({
       const dayStr = days.length === 7 ? '*' : days.join(',')
       const cronExpr = `${minute} ${hour} * * ${dayStr}`
 
-      // Delete old schedule
-      await fetch(`${SCHEDULER_BASE_URL}/schedules/${SCHEDULE_ID}`, {
+      // Delete old schedule via server-side API route
+      await fetch(`/api/scheduler?schedule_id=${SCHEDULE_ID}`, {
         method: 'DELETE',
-        headers: { 'x-api-key': API_KEY }
       })
 
-      // Create new schedule
-      const res = await fetch(`${SCHEDULER_BASE_URL}/schedules`, {
+      // Create new schedule via server-side API route
+      const res = await fetch('/api/scheduler', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'create',
           agent_id: AGENT_ID,
           cron_expression: cronExpr,
           timezone: timezone,
@@ -1048,11 +1046,12 @@ function SettingsTab({
         }),
       })
 
-      if (res.ok) {
+      const json = await res.json()
+      if (json.success) {
         setScheduleSuccess(true)
         setTimeout(() => setScheduleSuccess(false), 3000)
       } else {
-        setScheduleError('Failed to update schedule. Please try again.')
+        setScheduleError(json.error || 'Failed to update schedule. Please try again.')
       }
     } catch (e: any) {
       setScheduleError(e?.message || 'Failed to update schedule.')
