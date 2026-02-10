@@ -1,0 +1,36 @@
+{
+  "workflow_name": "Stock Analysis Daily Briefing Agent",
+  "agents": [
+    {
+      "agent_id": "698b17e3a6240bbb9e1087ef",
+      "name": "Stock Analysis Agent",
+      "type": "text",
+      "provider": "perplexity",
+      "model": "perplexity/sonar-pro",
+      "temperature": 0.3,
+      "top_p": 1,
+      "tools": ["gmail"],
+      "has_schedule": true
+    }
+  ],
+  "schedules": [
+    {
+      "schedule_id": "698b17f7ebe6fd87d1dcc0c3",
+      "agent_id": "698b17e3a6240bbb9e1087ef",
+      "agent_name": "Stock Analysis Agent",
+      "cron_expression": "0 7 * * 1-5",
+      "timezone": "America/New_York",
+      "message": "Analyze the following stocks and send a comprehensive morning briefing email: AAPL, MSFT, GOOGL, AMZN, TSLA. Include price movements, technical indicators, news sentiment, and actionable recommendations for each stock.",
+      "is_active": true,
+      "next_run": "2026-02-10T07:00:00-05:00",
+      "description": "Weekdays at 7:00 AM Eastern Time"
+    }
+  ],
+  "workflow_nodes": [
+    {"id": "input_scheduled", "type": "Input", "label": "Scheduled Trigger (Weekdays 7 AM ET)"},
+    {"id": "scheduler_node", "type": "Scheduler", "label": "Scheduled: Weekdays at 7:00 AM ET"},
+    {"id": "stock_analysis_agent", "type": "Agent", "label": "Stock Analysis Agent"},
+    {"id": "output", "type": "Output", "label": "Email Briefing Sent"}
+  ],
+  "created_at": "2026-02-10T11:35:19Z"
+}

@@ -1,0 +1,43 @@
+{
+  "agent_name": "Stock Analysis Agent",
+  "agent_id": "698b17e3a6240bbb9e1087ef",
+  "agent_purpose": "Stock market analyst that researches real-time stock data and compiles morning briefing emails",
+  "description": "Perplexity-based text agent that returns rich markdown stock analysis including price movement, technical indicators, news, analyst sentiment, and actionable recommendations. Response is raw markdown text, not structured JSON.",
+  "response_schema": {
+    "status": "string (success|error)",
+    "result": {
+      "response": "string",
+      "action_taken": "string (optional)",
+      "data": "object (optional, any structured data)",
+      "suggestions": [
+        "string (optional)"
+      ]
+    },
+    "metadata": {
+      "agent_name": "string",
+      "timestamp": "string (ISO)"
+    }
+  },
+  "example_response": {
+    "status": "success",
+    "result": {
+      "response": "I've completed the task you requested",
+      "action_taken": "Processed the input and generated output",
+      "data": {
+        "key": "value"
+      },
+      "suggestions": [
+        "You might also want to try X"
+      ]
+    },
+    "metadata": {
+      "agent_name": "Stock Analysis Agent",
+      "timestamp": "2025-01-15T10:30:00Z"
+    }
+  },
+  "is_actual_tested": false,
+  "test_timestamp": null,
+  "test_message_used": "Hello, provide a sample response",
+  "raw_test_response": "I'd be happy to help you with a sample response, but I need a bit more context to provide the most useful example.\n\nCould you clarify what type of response you're looking for? Based on the search results available, I can help with:\n\n- **Positive review responses** \u2014 thanking customers for favorable feedback\n- **Customer service email responses** \u2014 addressing complaints, technical issues, or order status inquiries\n- **Negative review responses** \u2014 professionally addressing constructive criticism\n- **Follow-up responses** \u2014 checking in after previous customer interactions\n- **Automated/canned responses** \u2014 templated replies for common inquiries\n\nIf you let me know the specific situation (e.g., responding to a customer complaint, replying to a positive review, addressing a technical support request), I can provide a tailored sample response with relevant examples from the sources.",
+  "test_error": "Response not valid JSON: Expecting value: line 1 column 1 (char 0)"
+}
