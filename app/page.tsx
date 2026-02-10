@@ -31,7 +31,7 @@ import { Separator } from '@/components/ui/separator'
 
 // Constants
 const AGENT_ID = '698b17e3a6240bbb9e1087ef'
-const SCHEDULE_ID = '698b17f7ebe6fd87d1dcc0c3'
+const SCHEDULE_ID = '698b1a9bebe6fd87d1dcc0c4'
 const SCHEDULER_BASE_URL = 'https://scheduler.studio.lyzr.ai'
 const API_KEY = process.env.NEXT_PUBLIC_LYZR_API_KEY || ''
 
@@ -275,7 +275,7 @@ async function fetchScheduleStatus(): Promise<ScheduleInfo | null> {
     const data = await res.json()
     return {
       is_active: data?.is_active ?? true,
-      cron_expression: data?.cron_expression ?? '0 7 * * 1-5',
+      cron_expression: data?.cron_expression ?? '20 17 * * 1-5',
       next_run: data?.next_run ?? '',
       timezone: data?.timezone ?? 'America/New_York',
     }
@@ -413,7 +413,7 @@ function DashboardTab({
         <Card className="border border-border bg-card">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold tracking-tight text-card-foreground">Schedule Status</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">Automated daily briefing</CardDescription>
+            <CardDescription className="text-xs text-muted-foreground">Automated weekday briefing at 5:20 PM ET</CardDescription>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
             {scheduleLoading ? (
@@ -424,7 +424,7 @@ function DashboardTab({
               <>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Frequency</span>
-                  <span className="text-foreground font-medium text-xs">Weekdays 7:00 AM ET</span>
+                  <span className="text-foreground font-medium text-xs">Weekdays 5:20 PM ET</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center text-sm">
@@ -900,7 +900,7 @@ function SettingsTab({
         <CardContent className="px-4 pb-4 space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Frequency</span>
-            <span className="text-foreground font-medium text-xs">Weekdays at 7:00 AM</span>
+            <span className="text-foreground font-medium text-xs">Weekdays at 5:20 PM</span>
           </div>
           <Separator />
           <div className="flex justify-between text-sm">
@@ -910,7 +910,7 @@ function SettingsTab({
           <Separator />
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Cron</span>
-            <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5">0 7 * * 1-5</code>
+            <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5">20 17 * * 1-5</code>
           </div>
           <Separator />
           <div className="flex justify-between text-sm">

@@ -15,20 +15,20 @@
   ],
   "schedules": [
     {
-      "schedule_id": "698b17f7ebe6fd87d1dcc0c3",
+      "schedule_id": "698b1a9bebe6fd87d1dcc0c4",
       "agent_id": "698b17e3a6240bbb9e1087ef",
       "agent_name": "Stock Analysis Agent",
-      "cron_expression": "0 7 * * 1-5",
+      "cron_expression": "20 17 * * 1-5",
       "timezone": "America/New_York",
-      "message": "Analyze the following stocks and send a comprehensive morning briefing email: AAPL, MSFT, GOOGL, AMZN, TSLA. Include price movements, technical indicators, news sentiment, and actionable recommendations for each stock.",
+      "message": "Analyze the following stocks and send a comprehensive evening briefing email: AAPL, MSFT, GOOGL, AMZN, TSLA. Include current price movements, technical indicators (RSI, MACD, moving averages), recent news and events, analyst sentiment, and actionable recommendations for each stock. Format as a structured briefing with clear sections and tables.",
       "is_active": true,
-      "next_run": "2026-02-10T07:00:00-05:00",
-      "description": "Weekdays at 7:00 AM Eastern Time"
+      "next_run": "2026-02-10T17:20:00-05:00",
+      "description": "Weekdays at 5:20 PM Eastern Time"
     }
   ],
   "workflow_nodes": [
-    {"id": "input_scheduled", "type": "Input", "label": "Scheduled Trigger (Weekdays 7 AM ET)"},
-    {"id": "scheduler_node", "type": "Scheduler", "label": "Scheduled: Weekdays at 7:00 AM ET"},
+    {"id": "input_scheduled", "type": "Input", "label": "Scheduled Trigger (Weekdays 5:20 PM ET)"},
+    {"id": "scheduler_node", "type": "Scheduler", "label": "Scheduled: Weekdays at 5:20 PM ET"},
     {"id": "stock_analysis_agent", "type": "Agent", "label": "Stock Analysis Agent"},
     {"id": "output", "type": "Output", "label": "Email Briefing Sent"}
   ],
