@@ -1027,8 +1027,10 @@ function SettingsTab({
       const cronExpr = `${minute} ${hour} * * ${dayStr}`
 
       // Delete old schedule via server-side API route
-      await fetch(`/api/scheduler?schedule_id=${SCHEDULE_ID}`, {
-        method: 'DELETE',
+      await fetch('/api/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', schedule_id: SCHEDULE_ID }),
       })
 
       // Create new schedule via server-side API route

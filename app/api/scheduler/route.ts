@@ -93,6 +93,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'delete') {
+      const { schedule_id } = body
+      if (!schedule_id) {
+        return NextResponse.json(
+          { success: false, error: 'schedule_id is required' },
+          { status: 400 }
+        )
+      }
+
+      const res = await fetch(`${SCHEDULER_BASE_URL}/schedules/${schedule_id}`, {
+        method: 'DELETE',
+        headers: { 'x-api-key': LYZR_API_KEY },
+      })
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { success: false, error: `Failed to delete schedule: status ${res.status}` },
+          { status: res.status }
+        )
+      }
+
+      return NextResponse.json({ success: true })
+    }
+
     if (action === 'create') {
       const { agent_id, cron_expression, timezone, message, max_retries, retry_delay } = body
 
