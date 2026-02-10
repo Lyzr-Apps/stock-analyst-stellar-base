@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
         headers: { 'x-api-key': LYZR_API_KEY },
       })
 
-      if (!res.ok) {
+      // Treat 404 as success — schedule already doesn't exist
+      if (!res.ok && res.status !== 404) {
         return NextResponse.json(
           { success: false, error: `Failed to delete schedule: status ${res.status}` },
           { status: res.status }
@@ -195,7 +196,8 @@ export async function DELETE(request: NextRequest) {
       headers: { 'x-api-key': LYZR_API_KEY },
     })
 
-    if (!res.ok) {
+    // Treat 404 as success — schedule already doesn't exist
+    if (!res.ok && res.status !== 404) {
       return NextResponse.json(
         { success: false, error: `Failed to delete schedule: status ${res.status}` },
         { status: res.status }

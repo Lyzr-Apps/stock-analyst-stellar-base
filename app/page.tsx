@@ -32,7 +32,7 @@ import { Separator } from '@/components/ui/separator'
 
 // Constants
 const AGENT_ID = '698b17e3a6240bbb9e1087ef'
-const SCHEDULE_ID = '698b1a9bebe6fd87d1dcc0c4'
+const DEFAULT_SCHEDULE_ID = '698b1a9bebe6fd87d1dcc0c4'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
 
@@ -83,6 +83,7 @@ AAPL shows strength above key MAs post-earnings beat, with bullish analyst conse
 const LS_WATCHLIST = 'stock_watchlist'
 const LS_HISTORY = 'stock_briefing_history'
 const LS_SETTINGS = 'stock_settings'
+const LS_SCHEDULE_ID = 'stock_schedule_id'
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
@@ -366,9 +367,10 @@ function buildCronExpression(days: string[], hour: number, minute: number): stri
 }
 
 // ---- Schedule status fetcher ----
-async function fetchScheduleStatus(): Promise<ScheduleInfo | null> {
+async function fetchScheduleStatus(scheduleId: string): Promise<ScheduleInfo | null> {
+  if (!scheduleId) return null
   try {
-    const res = await fetch(`/api/scheduler?schedule_id=${SCHEDULE_ID}`)
+    const res = await fetch(`/api/scheduler?schedule_id=${scheduleId}`)
     if (!res.ok) return null
     const json = await res.json()
     if (!json.success) return null
@@ -384,13 +386,14 @@ async function fetchScheduleStatus(): Promise<ScheduleInfo | null> {
   }
 }
 
-async function toggleSchedule(pause: boolean): Promise<boolean> {
+async function toggleSchedule(scheduleId: string, pause: boolean): Promise<boolean> {
+  if (!scheduleId) return false
   try {
     const action = pause ? 'pause' : 'resume'
     const res = await fetch('/api/scheduler', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, schedule_id: SCHEDULE_ID }),
+      body: JSON.stringify({ action, schedule_id: scheduleId }),
     })
     if (!res.ok) return false
     const json = await res.json()
@@ -416,6 +419,7 @@ function DashboardTab({
   setActiveAgentId,
   scheduleInfo,
   scheduleLoading,
+  scheduleId,
 }: {
   watchlist: string[]
   latestBriefing: string
@@ -426,6 +430,7 @@ function DashboardTab({
   setActiveAgentId: (id: string | null) => void
   scheduleInfo: ScheduleInfo | null
   scheduleLoading: boolean
+  scheduleId: string
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -469,9 +474,9 @@ function DashboardTab({
   }
 
   const handleToggleSchedule = async () => {
-    if (!localScheduleInfo) return
+    if (!localScheduleInfo || !scheduleId) return
     setTogglingSchedule(true)
-    const success = await toggleSchedule(localScheduleInfo.is_active)
+    const success = await toggleSchedule(scheduleId, localScheduleInfo.is_active)
     if (success) {
       setLocalScheduleInfo(prev => prev ? { ...prev, is_active: !prev.is_active } : prev)
     }
@@ -540,7 +545,7 @@ function DashboardTab({
                 <Separator />
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Schedule ID</span>
-                  <span className="text-xs font-mono text-muted-foreground">{SCHEDULE_ID.slice(0, 12)}...</span>
+                  <span className="text-xs font-mono text-muted-foreground">{scheduleId ? `${scheduleId.slice(0, 12)}...` : 'None'}</span>
                 </div>
                 <Separator />
                 <Button
@@ -909,6 +914,8 @@ function SettingsTab({
   setLatestBriefing,
   activeAgentId,
   setActiveAgentId,
+  scheduleId,
+  onScheduleIdChange,
 }: {
   settings: AppSettings
   setSettings: (s: AppSettings) => void
@@ -917,6 +924,8 @@ function SettingsTab({
   setLatestBriefing: (b: string) => void
   activeAgentId: string | null
   setActiveAgentId: (id: string | null) => void
+  scheduleId: string
+  onScheduleIdChange: (newId: string) => void
 }) {
   const [saved, setSaved] = useState(false)
   const [testLoading, setTestLoading] = useState(false)
@@ -1026,12 +1035,14 @@ function SettingsTab({
       const dayStr = days.length === 7 ? '*' : days.join(',')
       const cronExpr = `${minute} ${hour} * * ${dayStr}`
 
-      // Delete old schedule via server-side API route
-      await fetch('/api/scheduler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', schedule_id: SCHEDULE_ID }),
-      })
+      // Delete old schedule via server-side API route (404 = already gone, treated as success)
+      if (scheduleId) {
+        await fetch('/api/scheduler', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', schedule_id: scheduleId }),
+        })
+      }
 
       // Create new schedule via server-side API route
       const res = await fetch('/api/scheduler', {
@@ -1050,6 +1061,11 @@ function SettingsTab({
 
       const json = await res.json()
       if (json.success) {
+        // Capture the new schedule_id from the create response and persist it
+        const newScheduleId = json.data?.schedule_id || json.data?.id || json.data?._id
+        if (newScheduleId) {
+          onScheduleIdChange(newScheduleId)
+        }
         setScheduleSuccess(true)
         setTimeout(() => setScheduleSuccess(false), 3000)
       } else {
@@ -1295,6 +1311,7 @@ export default function Home() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState('')
   const [mounted, setMounted] = useState(false)
+  const [scheduleId, setScheduleId] = useState<string>(DEFAULT_SCHEDULE_ID)
   const [scheduleInfo, setScheduleInfo] = useState<ScheduleInfo | null>(null)
   const [scheduleLoading, setScheduleLoading] = useState(true)
 
@@ -1337,13 +1354,23 @@ export default function Home() {
       }
     } catch { /* ignore */ }
 
+    // Load persisted schedule ID
+    let activeScheduleId = DEFAULT_SCHEDULE_ID
+    try {
+      const storedId = localStorage.getItem(LS_SCHEDULE_ID)
+      if (storedId && storedId.length > 10) {
+        activeScheduleId = storedId
+        setScheduleId(storedId)
+      }
+    } catch { /* ignore */ }
+
     setLastSync(new Date().toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     }))
 
-    // Fetch schedule info
-    fetchScheduleStatus().then(info => {
+    // Fetch schedule info using the active schedule ID
+    fetchScheduleStatus(activeScheduleId).then(info => {
       setScheduleInfo(info)
       setScheduleLoading(false)
     })
@@ -1362,6 +1389,18 @@ export default function Home() {
       try { localStorage.setItem(LS_HISTORY, JSON.stringify(history)) } catch { /* ignore */ }
     }
   }, [history, mounted])
+
+  // Handle schedule ID change: persist to localStorage and refresh schedule info
+  const handleScheduleIdChange = useCallback((newId: string) => {
+    setScheduleId(newId)
+    try { localStorage.setItem(LS_SCHEDULE_ID, newId) } catch { /* ignore */ }
+    // Refresh schedule info with the new ID
+    setScheduleLoading(true)
+    fetchScheduleStatus(newId).then(info => {
+      setScheduleInfo(info)
+      setScheduleLoading(false)
+    })
+  }, [])
 
   const addToHistory = useCallback((content: string, stocks: string[]) => {
     const record: BriefingRecord = {
@@ -1426,6 +1465,7 @@ export default function Home() {
               setActiveAgentId={setActiveAgentId}
               scheduleInfo={scheduleInfo}
               scheduleLoading={scheduleLoading}
+              scheduleId={scheduleId}
             />
           </TabsContent>
 
@@ -1454,6 +1494,8 @@ export default function Home() {
               setLatestBriefing={setLatestBriefing}
               activeAgentId={activeAgentId}
               setActiveAgentId={setActiveAgentId}
+              scheduleId={scheduleId}
+              onScheduleIdChange={handleScheduleIdChange}
             />
           </TabsContent>
         </Tabs>
